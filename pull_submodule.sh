@@ -4,4 +4,4 @@ cp -r tmp/small-package/* .
 rm -rf tmp
 git add -A .
 git commit -m "update"
-git push -f
+git push -f origin small-package
