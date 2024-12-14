@@ -29,6 +29,8 @@ return view.extend({
             mihomo.appVersion(),
             mihomo.coreVersion(),
             mihomo.status(),
+            mihomo.getUsers(),
+            mihomo.getGroups(),
             network.getHostHints(),
         ]);
     },
@@ -38,7 +40,9 @@ return view.extend({
         const appVersion = data[2];
         const coreVersion = data[3];
         const running = data[4];
-        const hosts = data[5].hosts;
+        const users = data[5];
+        const groups = data[6];
+        const hosts = data[7].hosts;
 
         let m, s, o, so;
 
@@ -48,20 +52,20 @@ return view.extend({
 
         o = s.option(form.Value, '_app_version', _('App Version'));
         o.readonly = true;
-        o.load = function (section_id) {
+        o.load = function () {
             return appVersion.trim();
         };
         o.write = function () { };
 
         o = s.option(form.Value, '_core_version', _('Core Version'));
         o.readonly = true;
-        o.load = function (section_id) {
+        o.load = function () {
             return coreVersion.trim();
         };
         o.write = function () { };
 
         o = s.option(form.DummyValue, '_core_status', _('Core Status'));
-        o.cfgvalue = function (section_id) {
+        o.cfgvalue = function () {
             return renderStatus(running);
         };
         poll.add(function () {
@@ -99,38 +103,64 @@ return view.extend({
 
         s = m.section(form.NamedSection, 'config', 'config', _('Basic Config'));
 
-        o = s.option(form.Flag, 'enabled', _('Enable'));
+        s.tab('app', _('App Config'));
+
+        o = s.taboption('app', form.Flag, 'enabled', _('Enable'));
         o.rmempty = false;
 
-        o = s.option(form.Flag, 'scheduled_restart', _('Scheduled Restart'));
-        o.rmempty = false;
-
-        o = s.option(form.Value, 'cron_expression', _('Cron Expression'));
-        o.retain = true;
-        o.rmempty = false;
-        o.depends('scheduled_restart', '1');
-
-        o = s.option(form.ListValue, 'profile', _('Choose Profile'));
+        o = s.taboption('app', form.ListValue, 'profile', _('Choose Profile'));
         o.optional = true;
 
         for (const profile of profiles) {
             o.value('file:' + profile.name, _('File:') + profile.name);
-        }
+        };
 
         for (const subscription of subscriptions) {
             o.value('subscription:' + subscription['.name'], _('Subscription:') + subscription.name);
-        }
+        };
 
-        o = s.option(form.FileUpload, 'upload_profile', _('Upload Profile'));
+        o = s.taboption('app', form.FileUpload, 'upload_profile', _('Upload Profile'));
         o.root_directory = mihomo.profilesDir;
 
-        o = s.option(form.Flag, 'mixin', _('Mixin'));
+        o = s.taboption('app', form.Flag, 'mixin', _('Mixin'));
         o.rmempty = false;
 
-        o = s.option(form.Flag, 'test_profile', _('Test Profile'));
+        s.tab('startup', _('Startup Config'));
+
+        o = s.taboption('startup', form.Value, 'start_delay', _('Start Delay'));
+        o.datatype = 'uinteger';
+        o.placeholder = '0';
+
+        o = s.taboption('startup', form.Flag, 'scheduled_restart', _('Scheduled Restart'));
         o.rmempty = false;
 
-        o = s.option(form.Flag, 'fast_reload', _('Fast Reload'));
+        o = s.taboption('startup', form.Value, 'cron_expression', _('Cron Expression'));
+        o.retain = true;
+        o.rmempty = false;
+        o.depends('scheduled_restart', '1');
+
+        o = s.taboption('startup', form.Flag, 'test_profile', _('Test Profile'));
+        o.rmempty = false;
+
+        o = s.taboption('startup', form.Flag, 'fast_reload', _('Fast Reload'));
+        o.rmempty = false;
+
+        s.tab('core_env', _('Core Environment Variable Config'));
+
+        o = s.taboption('core_env', form.Flag, 'disable_safe_path_check', _('Disable Safe Path Check'));
+        o.ucisection = 'env';
+        o.rmempty = false;
+
+        o = s.taboption('core_env', form.Flag, 'disable_loopback_detector', _('Disable Loopback Detector'));
+        o.ucisection = 'env';
+        o.rmempty = false;
+
+        o = s.taboption('core_env', form.Flag, 'disable_quic_go_gso', _('Disable GSO of quic-go'));
+        o.ucisection = 'env';
+        o.rmempty = false;
+
+        o = s.taboption('core_env', form.Flag, 'disable_quic_go_ecn', _('Disable ECN of quic-go'));
+        o.ucisection = 'env';
         o.rmempty = false;
 
         s = m.section(form.NamedSection, 'proxy', 'proxy', _('Proxy Config'));
@@ -185,8 +215,8 @@ return view.extend({
             for (const ip of host.ipaddrs) {
                 const hint = host.name || mac;
                 o.value(ip, hint ? '%s (%s)'.format(ip, hint) : ip);
-            }
-        }
+            };
+        };
 
         o = s.taboption('access_control', form.DynamicList, 'acl_ip6', 'IP6');
         o.datatype = 'ipmask6';
@@ -199,8 +229,8 @@ return view.extend({
             for (const ip of host.ip6addrs) {
                 const hint = host.name || mac;
                 o.value(ip, hint ? '%s (%s)'.format(ip, hint) : ip);
-            }
-        }
+            };
+        };
 
         o = s.taboption('access_control', form.DynamicList, 'acl_mac', 'MAC');
         o.datatype = 'macaddr';
@@ -212,54 +242,112 @@ return view.extend({
             const host = hosts[mac];
             const hint = host.name || host.ipaddrs[0];
             o.value(mac, hint ? '%s (%s)'.format(mac, hint) : mac);
-        }
+        };
+
+        o = s.taboption('access_control', widgets.NetworkSelect, 'acl_interface', _('Interface'));
+        o.multiple = true;
+        o.optional = true;
+        o.retain = true;
+        o.depends('access_control_mode', 'allow');
+        o.depends('access_control_mode', 'block');
 
         s.tab('bypass', _('Bypass'));
+
+        o = s.taboption('bypass', form.MultiValue, 'bypass_user', _('Bypass User'));
+        o.create = true;
+
+        for (const user of users) {
+            o.value(user);
+        };
+
+        o = s.taboption('bypass', form.MultiValue, 'bypass_group', _('Bypass Group'));
+        o.create = true;
+
+        for (const group of groups) {
+            o.value(group);
+        };
 
         o = s.taboption('bypass', form.Flag, 'bypass_china_mainland_ip', _('Bypass China Mainland IP'));
         o.rmempty = false;
 
-        o = s.taboption('bypass', form.Value, 'acl_tcp_dport', _('Destination TCP Port to Proxy'));
+        o = s.taboption('bypass', form.Value, 'proxy_tcp_dport', _('Destination TCP Port to Proxy'));
         o.rmempty = false;
         o.value('0-65535', _('All Port'));
-        o.value('21 22 80 110 143 194 443 465 993 995 8080 8443', _('Commonly Used Port'));
+        o.value('21 22 80 110 143 194 443 465 853 993 995 8080 8443', _('Commonly Used Port'));
 
-        o = s.taboption('bypass', form.Value, 'acl_udp_dport', _('Destination UDP Port to Proxy'));
+        o = s.taboption('bypass', form.Value, 'proxy_udp_dport', _('Destination UDP Port to Proxy'));
         o.rmempty = false;
         o.value('0-65535', _('All Port'));
         o.value('123 443 8443', _('Commonly Used Port'));
 
-        s = m.section(form.TableSection, 'subscription', _('Subscription Config'));
+        s = m.section(form.GridSection, 'subscription', _('Subscription Config'));
         s.addremove = true;
         s.anonymous = true;
+        s.sortable = true;
+        s.modaltitle = _('Edit Subscription');
 
         o = s.option(form.Value, 'name', _('Subscription Name'));
         o.rmempty = false;
-        o.width = '15%';
+
+        o = s.option(form.Value, 'used', _('Used'));
+        o.modalonly = false;
+        o.optional = true;
+        o.readonly = true;
+
+        o = s.option(form.Value, 'total', _('Total'));
+        o.modalonly = false;
+        o.optional = true;
+        o.readonly = true;
+
+        o = s.option(form.Value, 'expire', _('Expire At'));
+        o.modalonly = false;
+        o.optional = true;
+        o.readonly = true;
+
+        o = s.option(form.Value, 'update', _('Update At'));
+        o.modalonly = false;
+        o.optional = true;
+        o.readonly = true;
+
+        o = s.option(form.Button, 'update_subscription');
+        o.editable = true;
+        o.inputstyle = 'positive';
+        o.inputtitle = _('Update');
+        o.modalonly = false;
+        o.onclick = function (_, section_id) {
+            return mihomo.updateSubscription(section_id);
+        };
 
         o = s.option(form.Value, 'url', _('Subscription Url'));
+        o.modalonly = true;
         o.rmempty = false;
 
         o = s.option(form.Value, 'user_agent', _('User Agent'));
-        o.default = 'mihomo';
+        o.default = 'clash';
+        o.modalonly = true;
         o.rmempty = false;
-        o.width = '15%';
         o.value('mihomo');
         o.value('clash.meta');
         o.value('clash');
 
+        o = s.option(form.ListValue, 'prefer', _('Prefer'));
+        o.default = 'remote';
+        o.modalonly = true;
+        o.value('remote', _('Remote'));
+        o.value('local', _('Local'));
+
         s = m.section(form.NamedSection, 'mixin', 'mixin', _('Mixin Config'));
-    
+
         s.tab('general', _('General Config'));
 
-        o = s.taboption('general', form.ListValue, 'log_level', _('Log Level'));
+        o = s.taboption('general', form.ListValue, 'log_level', '*' + ' ' + _('Log Level'));
         o.value('silent');
         o.value('error');
         o.value('warning');
         o.value('info');
         o.value('debug');
 
-        o = s.taboption('general', form.ListValue, 'mode', _('Proxy Mode'));
+        o = s.taboption('general', form.ListValue, 'mode', _('Mode'));
         o.value('global', _('Global Mode'));
         o.value('rule', _('Rule Mode'));
         o.value('direct', _('Direct Mode'));
@@ -269,37 +357,38 @@ return view.extend({
         o.value('always', _('Enable'));
         o.value('off', _('Disable'));
 
-        o = s.taboption('general', widgets.NetworkSelect, 'outbound_interface', _('Outbound Interface'));
+        o = s.taboption('general', widgets.NetworkSelect, 'outbound_interface', '*' + ' ' + _('Outbound Interface'));
         o.optional = true;
-        o.rmempty = false;
 
-        o = s.taboption('general', form.Flag, 'ipv6', _('IPv6'));
+        o = s.taboption('general', form.Flag, 'ipv6', '*' + ' ' + _('IPv6'));
         o.rmempty = false;
 
         o = s.taboption('general', form.Value, 'tcp_keep_alive_idle', _('TCP Keep Alive Idle'));
-        o.datatype = 'integer';
+        o.datatype = 'uinteger';
         o.placeholder = '600';
 
         o = s.taboption('general', form.Value, 'tcp_keep_alive_interval', _('TCP Keep Alive Interval'));
-        o.datatype = 'integer';
+        o.datatype = 'uinteger';
         o.placeholder = '15';
 
         s.tab('external_control', _('External Control Config'));
 
-        o = s.taboption('external_control', form.Value, 'ui_name', _('UI Name'));
+        o = s.taboption('external_control', form.Value, 'ui_name', '*' + ' ' + _('UI Name'));
         o.rmempty = false;
 
-        o = s.taboption('external_control', form.Value, 'ui_url', _('UI Url'));
+        o = s.taboption('external_control', form.Value, 'ui_url', '*' + ' ' + _('UI Url'));
         o.rmempty = false;
-        o.value('https://mirror.ghproxy.com/https://github.com/MetaCubeX/metacubexd/archive/refs/heads/gh-pages.zip', 'MetaCubeXD')
-        o.value('https://mirror.ghproxy.com/https://github.com/MetaCubeX/Yacd-meta/archive/refs/heads/gh-pages.zip', 'YACD')
-        o.value('https://mirror.ghproxy.com/https://github.com/MetaCubeX/Razord-meta/archive/refs/heads/gh-pages.zip', 'Razord')
+        o.value('https://ghp.ci/https://github.com/MetaCubeX/metacubexd/archive/refs/heads/gh-pages.zip', 'MetaCubeXD');
+        o.value('https://ghp.ci/https://github.com/MetaCubeX/Yacd-meta/archive/refs/heads/gh-pages.zip', 'YACD');
+        o.value('https://ghp.ci/https://github.com/MetaCubeX/Razord-meta/archive/refs/heads/gh-pages.zip', 'Razord');
+        o.value('https://ghp.ci/https://github.com/Zephyruso/zashboard/archive/refs/heads/gh-pages.zip', 'Zashboard');
 
-        o = s.taboption('external_control', form.Value, 'api_port', _('API Port'));
+        o = s.taboption('external_control', form.Value, 'api_port', '*' + ' ' + _('API Port'));
         o.datatype = 'port';
         o.placeholder = '9090';
 
-        o = s.taboption('external_control', form.Value, 'api_secret', _('API Secret'));
+        o = s.taboption('external_control', form.Value, 'api_secret', '*' + ' ' + _('API Secret'));
+        o.password = true;
         o.rmempty = false;
 
         o = s.taboption('external_control', form.Flag, 'selection_cache', _('Save Proxy Selection'));
@@ -307,38 +396,39 @@ return view.extend({
 
         s.tab('inbound', _('Inbound Config'));
 
-        o = s.taboption('inbound', form.Flag, 'allow_lan', _('Allow Lan'));
+        o = s.taboption('inbound', form.Flag, 'allow_lan', '*' + ' ' + _('Allow Lan'));
         o.rmempty = false;
 
-        o = s.taboption('inbound', form.Value, 'http_port', _('HTTP Port'));
+        o = s.taboption('inbound', form.Value, 'http_port', '*' + ' ' + _('HTTP Port'));
         o.datatype = 'port';
         o.placeholder = '8080';
 
-        o = s.taboption('inbound', form.Value, 'socks_port', _('SOCKS Port'));
+        o = s.taboption('inbound', form.Value, 'socks_port', '*' + ' ' + _('SOCKS Port'));
         o.datatype = 'port';
         o.placeholder = '1080';
 
-        o = s.taboption('inbound', form.Value, 'mixed_port', _('Mixed Port'));
+        o = s.taboption('inbound', form.Value, 'mixed_port', '*' + ' ' + _('Mixed Port'));
         o.datatype = 'port';
         o.placeholder = '7890';
 
-        o = s.taboption('inbound', form.Value, 'redir_port', _('Redirect Port'));
+        o = s.taboption('inbound', form.Value, 'redir_port', '*' + ' ' + _('Redirect Port'));
         o.datatype = 'port';
         o.placeholder = '7891';
 
-        o = s.taboption('inbound', form.Value, 'tproxy_port', _('TPROXY Port'));
+        o = s.taboption('inbound', form.Value, 'tproxy_port', '*' + ' ' + _('TPROXY Port'));
         o.datatype = 'port';
         o.placeholder = '7892';
 
-        o = s.taboption('inbound', form.Flag, 'authentication', _('Authentication'));
+        o = s.taboption('inbound', form.Flag, 'authentication', '*' + ' ' + _('Overwrite Authentication'));
         o.rmempty = false;
 
         o = s.taboption('inbound', form.SectionValue, '_authentications', form.TableSection, 'authentication', _('Edit Authentications'));
         o.retain = true;
         o.depends('authentication', '1');
 
-        o.subsection.anonymous = true;
         o.subsection.addremove = true;
+        o.subsection.anonymous = true;
+        o.subsection.sortable = true;
 
         so = o.subsection.option(form.Flag, 'enabled', _('Enable'));
         so.rmempty = false;
@@ -347,40 +437,44 @@ return view.extend({
         so.rmempty = false;
 
         so = o.subsection.option(form.Value, 'password', _('Password'));
+        so.password = true;
         so.rmempty = false;
 
         s.tab('tun', _('TUN Config'));
 
-        o = s.taboption('tun', form.ListValue, 'tun_stack', _('Stack'));
+        o = s.taboption('tun', form.ListValue, 'tun_stack', '*' + ' ' + _('Stack'));
         o.value('system', 'System');
         o.value('gvisor', 'gVisor');
         o.value('mixed', 'Mixed');
 
-        o = s.taboption('tun', form.Value, 'tun_mtu', _('MTU'));
+        o = s.taboption('tun', form.Value, 'tun_mtu', '*' + ' ' + _('MTU'));
+        o.datatype = 'uinteger';
         o.placeholder = '9000';
 
-        o = s.taboption('tun', form.Flag, 'tun_gso', _('GSO'));
+        o = s.taboption('tun', form.Flag, 'tun_gso', '*' + ' ' + _('GSO'));
         o.rmempty = false;
 
-        o = s.taboption('tun', form.Value, 'tun_gso_max_size', _('GSO Max Size'));
+        o = s.taboption('tun', form.Value, 'tun_gso_max_size', '*' + ' ' + _('GSO Max Size'));
+        o.datatype = 'uinteger';
         o.placeholder = '65536';
+        o.retain = true;
         o.depends('tun_gso', '1');
 
-        o = s.taboption('tun', form.Flag, 'tun_endpoint_independent_nat', _('Endpoint Independent NAT'));
+        o = s.taboption('tun', form.Flag, 'tun_endpoint_independent_nat', '*' + ' ' + _('Endpoint Independent NAT'));
         o.rmempty = false;
 
         s.tab('dns', _('DNS Config'));
 
-        o = s.taboption('dns', form.Value, 'dns_port', _('DNS Port'));
+        o = s.taboption('dns', form.Value, 'dns_port', '*' + ' ' + _('DNS Port'));
         o.datatype = 'port';
         o.placeholder = '1053';
 
-        o = s.taboption('dns', form.ListValue, 'dns_mode', _('DNS Mode'));
+        o = s.taboption('dns', form.ListValue, 'dns_mode', '*' + ' ' + _('DNS Mode'));
         o.value('normal', 'Normal');
         o.value('fake-ip', 'Fake-IP');
         o.value('redir-host', 'Redir-Host');
 
-        o = s.taboption('dns', form.Value, 'fake_ip_range', _('Fake-IP Range'));
+        o = s.taboption('dns', form.Value, 'fake_ip_range', '*' + ' ' + _('Fake-IP Range'));
         o.datatype = 'cidr4';
         o.placeholder = '198.18.0.1/16';
         o.retain = true;
@@ -395,7 +489,8 @@ return view.extend({
         o.retain = true;
         o.depends({ 'dns_mode': 'fake-ip', 'fake_ip_filter': '1' });
 
-        o = s.taboption('dns', form.ListValue, 'fake_ip_filter_mode', _('Fake-IP Filter Mode'))
+        o = s.taboption('dns', form.ListValue, 'fake_ip_filter_mode', _('Fake-IP Filter Mode'));
+        o.retain = true;
         o.value('blacklist', _('Block Mode'));
         o.value('whitelist', _('Allow Mode'));
         o.depends({ 'dns_mode': 'fake-ip', 'fake_ip_filter': '1' });
@@ -427,8 +522,9 @@ return view.extend({
         o.retain = true;
         o.depends('hosts', '1');
 
-        o.subsection.anonymous = true;
         o.subsection.addremove = true;
+        o.subsection.anonymous = true;
+        o.subsection.sortable = true;
 
         so = o.subsection.option(form.Flag, 'enabled', _('Enable'));
         so.rmempty = false;
@@ -445,16 +541,17 @@ return view.extend({
         o.retain = true;
         o.depends('dns_nameserver', '1');
 
+        o.subsection.addremove = true;
         o.subsection.anonymous = true;
-        o.subsection.addremove = false;
+        o.subsection.sortable = true;
 
         so = o.subsection.option(form.Flag, 'enabled', _('Enable'));
         so.rmempty = false;
 
         so = o.subsection.option(form.ListValue, 'type', _('Type'));
-        so.readonly = true;
         so.value('default-nameserver');
         so.value('proxy-server-nameserver');
+        so.value('direct-nameserver');
         so.value('nameserver');
         so.value('fallback');
 
@@ -467,8 +564,9 @@ return view.extend({
         o.retain = true;
         o.depends('dns_nameserver_policy', '1');
 
-        o.subsection.anonymous = true;
         o.subsection.addremove = true;
+        o.subsection.anonymous = true;
+        o.subsection.sortable = true;
 
         so = o.subsection.option(form.Flag, 'enabled', _('Enable'));
         so.rmempty = false;
@@ -503,15 +601,16 @@ return view.extend({
         o = s.taboption('geox', form.Flag, 'geox_auto_update', _('GeoX Auto Update'));
         o.rmempty = false;
 
-        o = s.taboption('geox', form.Value, 'geox_update_interval', _('GeoX Update Interval'), _('Hour'));
-        o.datatype = 'integer';
+        o = s.taboption('geox', form.Value, 'geox_update_interval', _('GeoX Update Interval'));
+        o.datatype = 'uinteger';
         o.placeholder = '24';
         o.retain = true;
         o.depends('geox_auto_update', '1');
 
-        s.tab('mixin_file_content', _('Mixin File Content'), _('Please go to the editor tab to edit the file for mixin'));
+        s.tab('mixin_file_content', _('Mixin File Content'));
 
-        o = s.taboption('mixin_file_content', form.HiddenValue, '_mixin_file_content');
+        o = s.taboption('mixin_file_content', form.Flag, 'mixin_file_content', '*' + ' ' + _('Enable'), _('Please go to the editor tab to edit the file for mixin'));
+        o.rmempty = false;
 
         return m.render();
     }
