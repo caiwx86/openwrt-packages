@@ -12,12 +12,12 @@ function git_update() {
   git rm -rf $final_dir
   mkdir $final_dir
   cp -r $repodir/* $final_dir
-  git add -A $final_dir
 }
 
 git_update https://github.com/kenzok8/openwrt-packages tmp/openwrt-packages
 git_update https://github.com/kenzok8/small tmp/small
 git_update https://github.com/kenzok8/small-package tmp/small-package
 git_update https://github.com/danchexiaoyang/luci-app-onliner tmp/other
+git add -A .
 git commit -m "update"
 git push -f
